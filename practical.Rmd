@@ -1,0 +1,133 @@
+---
+title: 'Practical Machine Learning #1'
+author: "Ryan Eaton"
+date: "Friday, September 05, 2014"
+output: html_document
+---
+
+###Introduction: 
+
+Wearable sensors are becoming an important part of how we monitor our well-being. Whether using the accelerometer in a our smartphone, or simple step counters to measure  our daily activity numerous opportunies exist to measure both the frequency and the quality of our movements. Using data provided through the coursera website collected in a study performed**[1]** using participants performing bicep curls with dumbbells, I have developped a random forest**[2]** model which would allow prediction of the quality of the movements performed.
+
+###Data Pre-Processing:
+
+The training data was loaded and found to have 19622 rows with 160 columns. The data contained the user performing the excercise, time series data, as well as the readings from the various sensors used in the study. The quality of a users activity was assigned to 5 different classes A,B,C,D,E. I decided that in order to develop a robust model that would be applicable to various users and did not rely on what phase of an excercise was being performed to drop the features related to the athlete, and the time series related data from the analysis. The testing data was loaded and found to have 20 rows with 160 columns.
+
+Certain remaining columns contained either frequent missing values, the term "DIV/0!", or NA values. All columns with any blank, "DIV/0!" or NA values were removed from the training set for model creation. 
+
+The training set was split into a training and cross-validation set to with 75% assigned for training and 25% to a cross-validation set. The testing dataset was set aside for use in final prediction, evaluated through the Coursera web submission interface.
+
+The caret library was used to help build and analyze the random forest model. Analysis was performed using RStudio Version 0.98.976, R version 3.0.3, on a machine with an intel running Windows 7.
+
+```{r,cache=TRUE}
+library(caret)
+
+train<-read.csv("pml-training.csv")
+testing<-read.csv("pml-testing.csv")
+
+# remove columns containing NA or "#DIV/0"
+train<-train[,colSums(is.na(train))==0]
+train<-train[,apply(train,2,function(x){sum(x=="#DIV/0!")==0})]
+train_ready<-as.data.frame(sapply(train[,-93],as.numeric))
+
+# remove row,user_name, and time series data
+train_ready<-train_ready[,-c(1,2,3,4,5,6,7)]
+
+# oops, dropped the classe column, put it back
+train_ready$classe<-train$classe
+
+#split into training and cross_validation
+inTrain<-createDataPartition(y=train_ready$classe,p=0.75,list=FALSE)
+training<-train_ready[inTrain,]
+cross_val<-train_ready[-inTrain,]
+
+```
+###Features:
+
+Having removed the time series data from the training set, it was decided to use a subset of data the remaining features to generate a random forest model based on 2% of the available training data, as the random forest prediction algorithm proved difficult to implement on the computer used. The reduced dataset allowed a much quicker generation of a model, and highlighted promising features as measured by the variable importance.
+
+
+```{r ,cache=TRUE}
+#subset 2% of the remaining data
+c<-1:nrow(train_ready)
+train_quick<-train_ready[c%%50==0,]
+
+#train quick model using this subset
+modFit1<-train(classe~.,data=train_quick,method="rf")
+
+#get the variable imoportance from model
+impvars<-as.data.frame(modFit1$finalModel[9])
+#print out confusion matrix, to see if model is accurately predicting based on small sample
+
+```
+**Figure 1.** Confusion Matrix of first 'quick' model
+
+```{r ,cache=TRUE}
+confusionMatrix(modFit1)
+```
+
+The confusion matrix shows that the model is correctly predicting the classe variable on the training set by investigating the main diagonal, with  
+
+As such it was decided to take the top 20 features from the small training set model, to create or final model on the full training data set, reserving the cross-validation set to estimate the out of sample error.   
+
+```{r,cache=TRUE}
+varnames<-rownames(impvars)
+best_20_vars<-head(varnames[order(-impvars)],20)
+best_20_vars
+```
+
+A paired scatterplot of the 4 most important feaures as measured by the mean GINI decrease, show that the randomforest model on the subset of the dataset, seems to have found some features of interest.
+
+
+
+**Figure 2.** Paired scatter plot of important features on small training set, colored by classe
+```{r,cache=TRUE}
+pairs(train_quick[,best_20_vars[1:4]],col=train_quick$classe)
+```
+
+
+
+Using these 20 features a random forest model was developped using the training set, reserving a small portion to generate an estimate of the out of sample error after model generation
+
+```{r ,eval=TRUE,cache=TRUE}
+#subset 20 best features as measured by variable importance.
+train_last<-training[,best_20_vars]
+#add classe column
+train_last$classe<-training$classe
+
+#generate model on 20 features using all rows from training set.
+modFit_full<-train(classe~.,data=train_last,method="rf")
+
+#generate predictions based on reserved cross-validation set, and compare with actual values
+results<-predict(modFit_full,cross_val)
+
+#estimated out of sample error 
+out_of_sample<-(1-sum(results==cross_val$classe)/nrow(cross_val))*100
+```
+**Figure 3.** Confusion Matrix on final model on training data
+
+```{r,cache=TRUE}
+modFit_full
+confusionMatrix(modFit_full)
+```
+
+
+###Evaluation of model:
+The model showed a 99% accuracy on the training set. To validate the out of sample error, I produced predictions on the cross-validation set and compared them to the actual values for the classe variable.
+
+The model performed well on the cross validation set, with an out of sample error estimate of `r out_of_sample` %. The model was then tested on the 20 samples provided in the test set and was able to predict the classe variable for 20 of the 20 samples, based on the Coursera auto-grader.
+
+###Conclusion:
+
+The final model performed well with 99% accuracy on the cross-validation set and perfectly on the small test sample provided for the assignement submission. It would be of value to further explore the features used to see if possibly a simpler model could be produced with fewer features. 
+
+###References:
+
+**1.**http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises  
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#sbia_paper_section#ixzz3DIR7T42B
+
+**2.**http://en.wikipedia.org/wiki/Random_forest
+
