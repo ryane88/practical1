@@ -1,7 +1,7 @@
 ---
 title: 'Practical Machine Learning #1'
 author: "Ryan Eaton"
-date: "Friday, September 05, 2014"
+date: "Sunday, September 14, 2014"
 output: html_document
 ---
 
@@ -21,7 +21,9 @@ The caret library was used to help build and analyze the random forest model. An
 
 ```{r,cache=TRUE}
 library(caret)
+set.seed(456789)
 
+#data files assumed to be in working directory
 train<-read.csv("pml-training.csv")
 testing<-read.csv("pml-testing.csv")
 
@@ -66,7 +68,7 @@ impvars<-as.data.frame(modFit1$finalModel[9])
 confusionMatrix(modFit1)
 ```
 
-The confusion matrix shows that the model is correctly predicting the classe variable on the training set by investigating the main diagonal, with  
+The confusion matrix shows that the model is correctly predicting the classe variable on the training set by investigating the main diagonal, with smaller percentages of values being mistakenly classified (values not on the main diagonal).
 
 As such it was decided to take the top 20 features from the small training set model, to create or final model on the full training data set, reserving the cross-validation set to estimate the out of sample error.   
 
@@ -76,7 +78,7 @@ best_20_vars<-head(varnames[order(-impvars)],20)
 best_20_vars
 ```
 
-A paired scatterplot of the 4 most important feaures as measured by the mean GINI decrease, show that the randomforest model on the subset of the dataset, seems to have found some features of interest.
+A paired scatterplot of the 4 most important feaures as measured by the mean GINI decrease, show that the randomforest model on the subset of the dataset, seems to have found some features that will help classify the predicted variable *classe*.
 
 
 
@@ -97,6 +99,7 @@ train_last$classe<-training$classe
 
 #generate model on 20 features using all rows from training set.
 modFit_full<-train(classe~.,data=train_last,method="rf")
+modFit_full
 
 #generate predictions based on reserved cross-validation set, and compare with actual values
 results<-predict(modFit_full,cross_val)
@@ -107,7 +110,7 @@ out_of_sample<-(1-sum(results==cross_val$classe)/nrow(cross_val))*100
 **Figure 3.** Confusion Matrix on final model on training data
 
 ```{r,cache=TRUE}
-modFit_full
+
 confusionMatrix(modFit_full)
 ```
 
